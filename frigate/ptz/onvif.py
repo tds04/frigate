@@ -647,13 +647,14 @@ class OnvifController:
         self.ptz_metrics[camera_name].stop_time.value = 0
         move_request = self.cams[camera_name]["absolute_move_request"]
 
+        # AXIS WORKAROUND FIX #2: Use zoom_limits instead of absolute_zoom_range
         # function takes in 0 to 1 for zoom, interpolate to the values of the camera.
         zoom = numpy.interp(
             zoom,
             [0, 1],
             [
-                self.cams[camera_name]["absolute_zoom_range"]["XRange"]["Min"],
-                self.cams[camera_name]["absolute_zoom_range"]["XRange"]["Max"],
+                self.cams[camera_name]["zoom_limits"]["Range"]["XRange"]["Min"],
+                self.cams[camera_name]["zoom_limits"]["Range"]["XRange"]["Max"],
             ],
         )
 
@@ -853,10 +854,11 @@ class OnvifController:
             # MoveStatus is required for autotracking - should return "true" if supported
             return find_by_key(vars(service_capabilities), "MoveStatus")
         except Exception as e:
+            # AXIS WORKAROUND FIX #1: Allow Axis cameras to proceed even if GetServiceCapabilities fails
             logger.warning(
-                f"Camera {camera_name} does not support the ONVIF GetServiceCapabilities method. Autotracking will not function correctly and must be disabled in your config. Exception: {e}"
+                f"Camera {camera_name} does not support the ONVIF GetServiceCapabilities method. Attempting to proceed anyway (Axis workaround). Exception: {e}"
             )
-            return False
+            return True  # Changed from False to allow Axis cameras to continue
 
     async def get_camera_status(self, camera_name: str) -> None:
         async with self.status_locks[camera_name]:
@@ -930,12 +932,13 @@ class OnvifController:
                 self.config.cameras[camera_name].onvif.autotracking.zooming
                 != ZoomingModeEnum.disabled
             ):
+                # AXIS WORKAROUND FIX #2: Use zoom_limits instead of absolute_zoom_range
                 # store absolute zoom level as 0 to 1 interpolated from the values of the camera
                 self.ptz_metrics[camera_name].zoom_level.value = numpy.interp(
                     round(status.Position.Zoom.x, 2),
                     [
-                        self.cams[camera_name]["absolute_zoom_range"]["XRange"]["Min"],
-                        self.cams[camera_name]["absolute_zoom_range"]["XRange"]["Max"],
+                        self.cams[camera_name]["zoom_limits"]["Range"]["XRange"]["Min"],
+                        self.cams[camera_name]["zoom_limits"]["Range"]["XRange"]["Max"],
                     ],
                     [0, 1],
                 )
